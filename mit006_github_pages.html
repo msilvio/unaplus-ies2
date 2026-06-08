@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIT006 — Controle de Pendências · Painel Operacional</title>
+<style>
+:root { color-scheme: light; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f1f5f9; min-height: 100vh; color: #1e293b; font-size: 13px;
+}
+.header {
+  background: #0f172a; color: white; padding: 13px 20px;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.header-title { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: #f1f5f9; }
+.header-sub   { font-size: 11px; color: #64748b; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.live-dot { font-size: 11px; font-weight: 500; }
+.live-dot.live    { color: #22c55e; }
+.live-dot.err     { color: #ef4444; }
+.live-dot.loading { color: #94a3b8; }
+.refresh-btn {
+  background: #1e293b; border: 1px solid #334155; color: #cbd5e1;
+  padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
+  transition: background .15s; white-space: nowrap;
+}
+.refresh-btn:hover:not(:disabled) { background: #334155; }
+.refresh-btn:disabled { opacity: .5; cursor: default; }
+.content { padding: 16px 20px 20px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 18px; }
+.kpi-card {
+  background: white; border-radius: 8px; padding: 16px 18px;
+  border-left: 4px solid transparent; box-shadow: 0 1px 3px rgba(0,0,0,.07);
+}
+.kpi-card.k1{border-left-color:#3b82f6} .kpi-card.k2{border-left-color:#22c55e}
+.kpi-card.k3{border-left-color:#f59e0b} .kpi-card.k4{border-left-color:#94a3b8}
+.kpi-num { font-size: 33px; font-weight: 700; line-height: 1.1; margin-bottom: 4px; }
+.kpi-card.k1 .kpi-num{color:#3b82f6} .kpi-card.k2 .kpi-num{color:#22c55e}
+.kpi-card.k3 .kpi-num{color:#f59e0b} .kpi-card.k4 .kpi-num{color:#94a3b8}
+.kpi-lbl { font-size: 11.5px; color: #64748b; margin-bottom: 2px; }
+.kpi-pct { font-size: 11px; font-weight: 600; }
+.kpi-card.k1 .kpi-pct{color:#3b82f6} .kpi-card.k2 .kpi-pct{color:#22c55e}
+.kpi-card.k3 .kpi-pct{color:#f59e0b} .kpi-card.k4 .kpi-pct{color:#94a3b8}
+.sec-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .09em; color: #64748b;
+  margin-bottom: 11px; display: flex; align-items: center; gap: 5px;
+}
+.pill {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:16px; border-radius:3px; font-size:9px; font-weight:700; color:white;
+}
+.pill-c{background:#3b82f6} .pill-f{background:#f59e0b}
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.panel { background: white; border-radius: 8px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+.panel-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9;
+}
+.pbadge {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:5px; font-size:11px; font-weight:700; color:white;
+}
+.pbadge-c{background:#3b82f6} .pbadge-f{background:#f59e0b}
+.ptitle { font-size:11px; font-weight:600; letter-spacing:.06em; color:#475569; }
+.bar-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.bar-lbl {
+  font-size:11px; color:#374151; width:158px; min-width:158px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.bar-track { flex:1; height:7px; background:#f1f5f9; border-radius:4px; overflow:hidden; }
+.bar-fill  { height:100%; border-radius:4px; min-width:3px; transition: width .4s ease; }
+.fill-c{background:#3b82f6} .fill-f{background:#f59e0b}
+.bar-val { font-size:11px; font-weight:600; color:#64748b; min-width:24px; text-align:right; }
+.status-bar {
+  margin-top: 14px; font-size: 11px; color: #94a3b8; text-align: center; min-height: 16px;
+}
+.error-msg {
+  background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+  padding: 10px 14px; border-radius: 7px; font-size: 12px;
+  margin-bottom: 14px; display: none;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.spin { display:inline-block; animation:spin 1s linear infinite; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div>
+    <div class="header-title">MIT006 — Controle de Pendências · Painel Operacional</div>
+    <div class="header-sub">Projeto UNA+ · La Salle · <span id="ts">—</span></div>
+  </div>
+  <div class="header-right">
+    <span class="live-dot loading" id="live-dot">● Carregando</span>
+    <button class="refresh-btn" id="btn" onclick="load()" disabled>↺ Atualizar dados</button>
+  </div>
+</header>
+
+<div class="content">
+  <div class="error-msg" id="err"></div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card k1">
+      <div class="kpi-num" id="v-total">—</div>
+      <div class="kpi-lbl">Total de pendências</div>
+      <div class="kpi-pct">100%</div>
+    </div>
+    <div class="kpi-card k2">
+      <div class="kpi-num" id="v-conc">—</div>
+      <div class="kpi-lbl">Concluídas</div>
+      <div class="kpi-pct" id="p-conc">—</div>
+    </div>
+    <div class="kpi-card k3">
+      <div class="kpi-num" id="v-and">—</div>
+      <div class="kpi-lbl">Em andamento / análise</div>
+      <div class="kpi-pct" id="p-and">—</div>
+    </div>
+    <div class="kpi-card k4">
+      <div class="kpi-num" id="v-ni">—</div>
+      <div class="kpi-lbl">Não iniciadas</div>
+      <div class="kpi-pct" id="p-ni">—</div>
+    </div>
+  </div>
+
+  <div class="sec-label">
+    INDICADORES — COL.&nbsp;
+    <span class="pill pill-c">C</span>
+    <span style="color:#cbd5e1">·</span>
+    <span class="pill pill-f">F</span>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="pbadge pbadge-c">C</span>
+        <span class="ptitle">ÁREA</span>
+      </div>
+      <div id="bars-area"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <span class="pbadge pbadge-f">F</span>
+        <span class="ptitle">TRATAMENTO</span>
+      </div>
+      <div id="bars-trat"></div>
+    </div>
+  </div>
+
+  <div class="status-bar" id="sbar"></div>
+</div>
+
+<script>
+/* ─── Cole aqui a URL gerada ao implantar o Apps Script ────────────────────── */
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcgIHcuVKOX0qRWxjmlR8E_6XhnzkZNqpYjPXEtqpz1aS-ciZXi-MlCeVAdCsonDqnzA/exec';
+const TOTAL_ESPERADO = 249;   // B6:B254
+
+/* ─── Utils ──────────────────────────────────────────────────────────────────── */
+function stamp() {
+  return new Date().toLocaleString('pt-BR', {
+    day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+}
+function pct(v, t) { return t > 0 ? (v / t * 100).toFixed(1) + '%' : '0%'; }
+function setDot(mode, label) {
+  const el = document.getElementById('live-dot');
+  el.className = 'live-dot ' + mode;
+  el.textContent = label;
+}
+
+/* ─── Render ─────────────────────────────────────────────────────────────────── */
+function renderBars(id, counts, cls) {
+  const entries = Object.entries(counts).filter(([k]) => k).sort((a, b) => b[1] - a[1]);
+  const max = entries.length ? entries[0][1] : 1;
+  document.getElementById(id).innerHTML = entries.map(([k, v]) => `
+    <div class="bar-row">
+      <div class="bar-lbl" title="${k}">${k}</div>
+      <div class="bar-track"><div class="bar-fill ${cls}" style="width:${(v/max*100).toFixed(1)}%"></div></div>
+      <div class="bar-val">${v}</div>
+    </div>`).join('');
+}
+
+function paint(st, ar, tr) {
+  const total = TOTAL_ESPERADO;
+  const conc  = (st['Concluído'] || 0) + (st['Concluido'] || 0);
+  const ni    = st['Não iniciado'] || 0;
+  const and   = total - conc - ni;   // residual de U6:U254
+
+  document.getElementById('v-total').textContent = total;
+  document.getElementById('v-conc').textContent  = conc;
+  document.getElementById('p-conc').textContent  = pct(conc, total);
+  document.getElementById('v-and').textContent   = and;
+  document.getElementById('p-and').textContent   = pct(and, total);
+  document.getElementById('v-ni').textContent    = ni;
+  document.getElementById('p-ni').textContent    = pct(ni, total);
+
+  renderBars('bars-area', ar, 'fill-c');
+  renderBars('bars-trat', tr, 'fill-f');
+}
+
+/* ─── Loader via JSONP (contorna CORS do Apps Script) ────────────────────────── */
+function loadJSONP(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_mit006_' + Date.now();
+    const script = document.createElement('script');
+    const timer  = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timeout — Apps Script não respondeu em 15 s'));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    script.src   = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
+    script.onerror = () => { cleanup(); reject(new Error('Falha ao carregar script do Apps Script')); };
+    document.head.appendChild(script);
+  });
+}
+
+function load() {
+  if (!SCRIPT_URL || SCRIPT_URL === 'COLE_AQUI_A_URL_DO_APPS_SCRIPT') {
+    showError('Configure a variável SCRIPT_URL no HTML com a URL do Apps Script implantado.');
+    return;
+  }
+
+  document.getElementById('ts').textContent    = stamp();
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('sbar').innerHTML    = '<span class="spin">↺</span> Buscando dados…';
+  document.getElementById('btn').disabled      = true;
+  setDot('loading', '● Carregando');
+
+  loadJSONP(SCRIPT_URL)
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      paint(data.status, data.area, data.tratamento);
+      setDot('live', '● Ao vivo');
+      document.getElementById('sbar').textContent =
+        `Atualizado em ${stamp()} · ${data.count} registros lidos`;
+    })
+    .catch(e => {
+      setDot('err', '● Erro');
+      showError(e.message);
+      document.getElementById('sbar').textContent = 'Falha ao carregar dados.';
+    })
+    .finally(() => {
+      document.getElementById('btn').disabled = false;
+    });
+}
+
+function showError(msg) {
+  const el = document.getElementById('err');
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
+/* ─── Init ───────────────────────────────────────────────────────────────────── */
+load();
+</script>
+</body>
+</html>
